@@ -1,0 +1,200 @@
+---
+title: 'BioinfoSummer2015: 450k Analysis Workshop'
+author: "Jovana Maksimovic and Belinda Phipson"
+date: "27 November 2015"
+output: html_document
+---
+
+#Introduction
+Methylation, the addition of a methyl group to a CG dinucleotide of the DNA, is the most extensively studied epigenetic mark. Although it can be measured in many ways, the most popular platform for measuring methylation has been the Illumina HumanMethylation450 (450k) array. In this workshop, we will introduce the features of the 450k array and how to analyse the methylation array data using R. We will cover the steps involved in the standard 450k analysis pipeline including: quality control, filtering, normalization, data exploration and probe-wise differential methylation array analysis. We will also cover other approaches such as differential methylation analysis of regions, differential variability analysis and gene ontology analysis. Finally, we will provide some examples of how to visualise methylation array data
+
+##Preparing for the workshop
+###Software
+To participate in this workshop you will need the following software installed on your computer:
+- [R (3.2.2)](https://cran.r-project.org/)
+- [RStudio (0.99.489)](https://www.rstudio.com/products/rstudio/download/)
+You should then start **RStudio** and install [Bioconductor (3.2)](http://bioconductor.org/install/) and several required packages by running the following commands:
+
+```{r, eval=FALSE}
+## install required Bioconductor packages
+source("http://www.bioconductor.org/biocLite.R")
+biocLite()
+biocLite(c("minfi","limma","IlluminaHumanMethylation450kanno.ilmn12.hg19",
+          "IlluminaHumanMethylation450kmanifest","RColorBrewer","missMethyl",
+          "ruv","bumphunter","stringi","plyr","Gviz","matrixStats","minfiData"))
+```
+
+###Data
+To demonstrate the various aspects of analysing methylation data, we will be using 3 small example datasets. Please download the following datasets to your cmoputer:
+- Yuxia's T-cell data
+- Poor quality data
+- Something else?
+
+[Illumina HumanMethylation450 (450k) arrays](http://www.illumina.com/products/methylation_450_beadchip_kits.html) are a cost-effective alternative to whole genome bisulfite sequencing, and as such have been widely used to profile DNA methylation. Illumina have recently release a new platform, the [Illumina MethylationEPIC array](http://www.illumina.com/products/infinium-methylation-epic-array.html), which increases the number of CpG probes from ~450,000 to ~850,000. Although the cost of sequencing is decreasing, the release of a new array platform indicates that sequencing is unlikely to replace arrays for many methylation studies in the near future. Consequently, being familiar with Illumina's arrays and how to analyse them is important if you are interested in assaying methylation.      
+
+```{r, cache=TRUE}
+## load packages required for analysis
+library(limma)
+library(minfi)
+library(IlluminaHumanMethylation450kanno.ilmn12.hg19)
+library(IlluminaHumanMethylation450kmanifest)
+library(RColorBrewer)
+library(missMethyl)
+library(ruv)
+library(matrixStats)
+library(minfiData)
+
+## get the 450k annotation data
+ann.450k = getAnnotation(IlluminaHumanMethylation450kanno.ilmn12.hg19)
+head(ann.450k)
+
+## read in the sample sheet for the experiment
+targets = read.450k.sheet("D:/Work/BioinfoSummer2015/450k_analysis_workshop/data",
+                          pattern="ILML450-6555_SampleSheet.csv")
+targets
+targets = targets[targets$Sample_Source != "LCH",] ## exclude irrelevant samples
+
+## read in the raw data from the IDAT files
+rgset = read.450k.exp(targets=targets)
+rgset
+
+## give the samples meaningful names
+targets$ID = paste(targets$Sample_Group,targets$Sample_Name,sep=".")
+sampleNames(rgset) = targets$ID
+rgset
+
+## calculate the detection P-values
+detp = detectionP(rgset)
+head(detp)
+```
+
+```{r, cache=TRUE}
+## look at the mean detection P-values across all samples to identify any failed samples
+barplot(apply(detp,2,mean),col=as.numeric(factor(targets$Sample_Group)),las=2,cex.names=0.8)
+abline(h=0.01,col="red")
+
+barplot(apply(detp,2,mean),col=as.numeric(factor(targets$Sample_Group)),las=2,cex.names=0.8,ylim=c(0,0.015))
+abline(h=0.01,col="red")
+
+## remove failed samples
+# keep.samples = apply(detp,2,mean) < 0.01
+# rgset = rgset[,keep.samples]
+# targets = targets[keep.samples,]
+# detp = detp[,keep.samples]
+```
+```{r, eval=FALSE}
+## produce a general QC report for the data
+#qcReport(rgset,sampNames=targets$ID,sampGroups=targets$Sample_Group,pdf="qc_report.pdf")
+```
+
+```{r, cache=TRUE}
+## make an individual density plot of the beta values, this is also pat of the QC report
+densityPlot(rgset, sampGroups = targets$Sample_Group)
+
+## create a MethylSet object from the raw data
+mset.raw = preprocessRaw(rgset)
+mset.raw
+
+## examine the major sources of variation in the data using MDS plots (minfi function)
+mdsPlot(mset.raw, sampGroups = targets$Sample_Group, sampNames=targets$ID, legendPos="topright")
+mdsPlot(mset.raw, sampGroups = targets$Sample_Group, sampNames=targets$Sample_Source, legendPos="bottomright")
+mdsPlot(mset.raw, sampGroups = targets$Sample_Source, sampNames=targets$Sample_Group, legendPos="topright")
+
+## same as the previous plot (using limma function)
+pal = brewer.pal(8, "Dark2")
+plotMDS(getBeta(mset.raw), top=1000, gene.selection = "common", col=pal[as.factor(targets$Sample_Group)], dim=c(1,2))
+legend("topright",legend=levels(factor(targets$Sample_Group)),text.col=pal[1:length(unique(targets$Sample_Group))])
+
+## now examine higher dimensions to look at other sources of variation
+plotMDS(getBeta(mset.raw), gene.selection = "common", col=pal[as.factor(targets$Sample_Group)], dim=c(1,3))
+legend("topright",legend=levels(factor(targets$Sample_Group)),text.col=pal[1:length(unique(targets$Sample_Group))])
+
+plotMDS(getBeta(mset.raw), gene.selection = "common", col=pal[as.factor(targets$Sample_Group)], dim=c(2,3))
+legend("topright",legend=levels(factor(targets$Sample_Group)),text.col=pal[1:length(unique(targets$Sample_Group))])
+
+plotMDS(getBeta(mset.raw), gene.selection = "common", col=pal[as.factor(targets$Sample_Group)], dim=c(3,4))
+legend("topright",legend=levels(factor(targets$Sample_Group)),text.col=pal[1:length(unique(targets$Sample_Group))])
+
+## normalize betwee probe types
+mset.sw = preprocessSWAN(rgSet = rgset, mSet = mset.raw, verbose=TRUE)
+gmset = mapToGenome(mset.sw)
+# gmset = preprocessQuantile(rgset) ## alternative normalization method provided in minfi
+gmset
+
+## examine beta value density plots before and after normalization
+par(mfrow=c(1,2))
+densityPlot(rgset, sampGroups = targets$Sample_Group)
+densityPlot(getBeta(gmset), sampGroups = targets$Sample_Group)
+
+## remove any probes that have failed in one or more samples
+keep = rowSums(detp < 0.01) == ncol(gmset) 
+gmset.fl = gmset[keep,]
+gmset.fl
+
+## get info on probes with SNPs (latest dbSNP)
+snpDF = getSnpInfo(gmset.fl, snpAnno = NULL)
+head(snpDF)
+
+## remove probes with SNPs at CpG or SBE site with MAF > 1%
+maf_cols = c("CpG_maf", "SBE_maf")
+maf = 0.01
+drop.snps = sort(Reduce(union, lapply(maf_cols, function(xx) {which(snpDF[, xx] >= maf)})))
+gmset.fl = gmset.fl[-drop.snps, ]
+gmset.fl
+
+## if your data infludes males and females, remove the sex chromosomes
+ autosomes = !(featureNames(gmset.fl) %in% ann.450k$Name[ann.450k$chr %in% c("chrX","chrY")])
+ gmset.fl = gmset.fl[autosomes,]
+
+## exclude cross reactive probes 
+cross.react = read.csv(file="D:/Work/BioinfoSummer2015/450k_analysis_workshop/data/48639-non-specific-probes-Illumina450k.csv", 
+                       stringsAsFactors=FALSE)
+no.xreact = !(featureNames(gmset.fl) %in% cross.react$TargetID) 
+gmset.fl = gmset.fl[no.xreact,] 
+gmset.fl
+
+## calculate M-values for statistical analysis
+m = log2((getMeth(gmset.fl)+100)/(getUnmeth(gmset.fl)+100))
+head(m)
+
+cell.type = factor(targets$Sample_Group) ## this is the factor of interest
+individual = factor(targets$Sample_Source) ## this is the individual effect that we need to account for
+## use the above to create a design matrix
+design = model.matrix(~0+cell.type+individual, data=targets)
+colnames(design) = c(levels(cell.type),levels(individual)[-1])
+  
+fit = lmFit(m, design) ## fit the linear model
+## creater a contrasts matrix for specific comparisons
+cont.matrix = makeContrasts(naive-rTreg,
+                            naive-act_naive,
+                            rTreg-act_rTreg,
+                            act_naive-act_rTreg,
+                            levels=design)
+cont.matrix
+
+## fit the contrasts
+fit2 = contrasts.fit(fit, cont.matrix)
+fit2 = eBayes(fit2)
+
+## look at the numbers of DM CpGs at FDR < 0.05
+summary(decideTests(fit2))
+
+## get the table of results for the first contrast (naive - rTreg)
+result = topTable(fit2, num=Inf, coef=1)
+head(result)
+
+## add annotation information to the result
+result = merge(result,ann.450k,by.x="row.names",by.y="row.names")
+result = result[order(result$adj.P.Val),]
+head(result)
+```
+
+```{r, eval=FALSE}
+write.table(result, file="result.csv", sep=",", row.names=FALSE)
+
+```
+
+# Software versions
+```{r}
+sessionInfo()
+```
