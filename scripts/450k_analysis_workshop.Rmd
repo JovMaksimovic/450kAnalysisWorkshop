@@ -6,6 +6,7 @@ output:
   html_document: 
     fig_caption: yes
     fig_height: 7
+    fig_width: 10
     number_sections: yes
     toc: yes
 ---
