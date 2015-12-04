@@ -5,7 +5,7 @@ date: "27 November 2015"
 output: 
   html_document: 
     fig_caption: yes
-    fig_width: 5
+    fig_height: 7
     number_sections: yes
     toc: yes
 ---
@@ -39,7 +39,7 @@ To demonstrate the various aspects of analysing methylation data, we will be usi
 [Illumina HumanMethylation450 (450k) arrays](http://www.illumina.com/products/methylation_450_beadchip_kits.html) are a cost-effective alternative to whole genome bisulfite sequencing, and as such have been widely used to profile DNA methylation, particularly for studies with large numbers of samples. Illumina have recently release a new platform, the [Illumina MethylationEPIC array](http://www.illumina.com/products/infinium-methylation-epic-array.html), which increases the number of CpG probes from ~450,000 to ~850,000. Although the number of CpGs covered is increased on the new array, the same probe chemistry is being used and thus the principles for analysing the 450k array should be largely applicable to the new 850k array.     
 
 # Standard analysis
-This workshop will cover various aspects of a basic differential methylation analysis of 450k arrays. We will begin with an example of a **probe-wise** methylation analysis using *minfi* and *limma*. By *probe-wise* analysis we mean that we will obtain a moderated t-statistic and p-value for each individual CpG probe, which we can use to determine which individual CpGs are differentially methylated at some significance level for our comparisons of interest.
+This workshop will cover various aspects of a basic differential methylation analysis of 450k arrays. We will begin with an example of a **probe-wise** methylation analysis using *minfi* and *limma*. By **probe-wise** analysis we mean that we will obtain a moderated t-statistic and p-value for each individual CpG probe, which we can use to determine which individual CpGs are differentially methylated at some significance level for our comparisons of interest.
 
 ### Loading the data
 We will begin by loading all the package libraries that will be required for the analysis.
@@ -64,7 +64,7 @@ ann450k = getAnnotation(IlluminaHumanMethylation450kanno.ilmn12.hg19)
 head(ann450k)
 ```
 
-Next, we will load in the data. The sample sheet file is essentially a CSV (comma-separated) file containing one line per sample, with a number of columns describing each sample. The format expected by the `rread.450k.sheet` function is based on the sample sheet file Illumina provides. It is also very similar to the targets file made popular by the *limma* package (see the extensive [Limma User's Guide](https://www.bioconductor.org/packages/release/bioc/vignettes/limma/inst/doc/usersguide.pdf)). Raeding in the sample sheet essentially creates a `rdata.frame`. If they exist, a column named `Sentrix_Position` is renamed to `Array` and `Sentrix_ID` is renamed to `Slide`. The function also attempts to derive the path to the IDAT files using the `rbaseDir` and the `Slide` and `Array` information. This will be stored in a column named `Basename`.
+Next, we will load in the data. The sample sheet file is essentially a CSV (comma-separated) file containing one line per sample, with a number of columns describing each sample. The format expected by the `read.450k.sheet` function is based on the sample sheet file Illumina provides. It is also very similar to the targets file made popular by the *limma* package (see the extensive [Limma User's Guide](https://www.bioconductor.org/packages/release/bioc/vignettes/limma/inst/doc/usersguide.pdf)). Raeding in the sample sheet essentially creates a `data.frame`. If they exist, a column named `Sentrix_Position` is renamed to `Array` and `Sentrix_ID` is renamed to `Slide`. The function also attempts to derive the path to the IDAT files using the `baseDir` and the `Slide` and `Array` information. This will be stored in a column named `Basename`.
 ```{r, cache=TRUE}
 ## read in the sample sheet for the experiment
 targets = read.450k.sheet("D:/Work/BioinfoSummer2015/450kAnalysisWorkshop/data",
@@ -115,7 +115,7 @@ rgSet
 targets
 ```
 
-You can also generate other quality control plots using the *minfi* `rqcReport` function. The *minfi* [vignette](http://bioconductor.org/packages/release/bioc/vignettes/minfi/inst/doc/minfi.pdf) describes the various plots in this report and how they should be interpreted. Generally, samples that look poor based on mean detection p-value will also look poor using other metrics and it is usually advisable to exclude them from further analysis.
+You can also generate other quality control plots using the *minfi* `qcReport` function. The *minfi* [vignette](http://bioconductor.org/packages/release/bioc/vignettes/minfi/inst/doc/minfi.pdf) describes the various plots in this report and how they should be interpreted. Generally, samples that look poor based on mean detection p-value will also look poor using other metrics and it is usually advisable to exclude them from further analysis.
 ```{r, eval=FALSE}
 ## produce a general QC report for the data
 qcReport(rgSet,sampNames=targets$ID,sampGroups=targets$Sample_Group,pdf="qcReport.pdf")
@@ -163,9 +163,10 @@ legend("topright",legend=levels(factor(targets$Sample_Group)),text.col=pal)
 ```
 
 ### Filtering
+Poor performing probes are generally filtered out prior to differential methylation analysis. As the signal from these probes is unreliable, by removing them we perform fewer statistical tests and thus incur a reduced multiple testing adjustment. We filter out probes that have failed in one or more samples based on detection p-value. The detection  p-values are automatically calculated using the signal from the negative control probes on the array; probes that are determined to not have a signal significantly different from the background level have high detection p-values.   
 ```{r, cache=TRUE}
 ## remove any probes that have failed in one or more samples
-detP = detP[match(featureNames(mSetSq),rownames(detP)),] # esure probes are in the same order
+detP = detP[match(featureNames(mSetSq),rownames(detP)),] # ensure probes are in the same order in the mSetSq and detP objects
 keep = rowSums(detP < 0.01) == ncol(mSetSq) 
 table(keep)
 
@@ -173,7 +174,7 @@ mSetSqFlt = mSetSq[keep,]
 mSetSqFlt
 ```
 
-
+Depending on the nature of your samples and your biological question you may also choose to filter out the probes from the X and Y chromosomes or probes that are known to have common SNPs at the CpG site. This can be done using the code below, however, we will not be filtering out these probes as part of the analysis in this workshop.
 ```{r, eval=FALSE}
 ## if your data infludes males and females, remove the sex chromosomes
 keep = !(featureNames(mSetSqFlt) %in% ann450k$Name[ann450k$chr %in% c("chrX","chrY")])
@@ -185,7 +186,7 @@ mSetSqFlt = mSetSqFlt[keep,]
 mSetSqFlt = dropLociWithSnps(mSetSqFlt)
 ```
 
-
+We will also filter out probes that have shown to be cross-reactive i.e. map to multiple places in the genome. This list was oroginally published by [Chen et al.](http://www.tandfonline.com/doi/abs/10.4161/epi.23470) in 2013 and can be downloaded directly from the author's [website](http://www.sickkids.ca/MS-Office-Files/Research/Weksberg%20Lab/48639-non-specific-probes-Illumina450k.xlsx). The Excel spreadsheet containing the cross-reactive probes is also available as part of the data download for this workshop.
 ```{r, cache=TRUE}
 ## exclude cross reactive probes 
 xReactiveProbes = read.csv(file="D:/Work/BioinfoSummer2015/450kAnalysisWorkshop/data/48639-non-specific-probes-Illumina450k.csv", stringsAsFactors=FALSE)
@@ -194,7 +195,10 @@ table(keep)
 
 mSetSqFlt = mSetSqFlt[keep,] 
 mSetSqFlt
+```
 
+After the data has been normalised and filtered, we can calculate M and $\beta$ values. $$M=log2(methylated/unmethylated)$$ $$\beta=methylated/(methylated+unmethylated)$$ M-values have nicer statistical properties and are thus better for use in statistical analysis of methylation data whilst $\beta$ values are easy to interpret and are thus better for displaying data. A detailed comparison of M and $\beta$ values was published by [Du et al.](http://www.biomedcentral.com/1471-2105/11/587) in 2010.  
+```{r, cache=TRUE}
 ## calculate M-values for statistical analysis
 mVals = getM(mSetSqFlt)
 head(mVals)
@@ -298,22 +302,113 @@ topDV
 ```
 
 ## Differential methylation analysis (regions)
+Although performing a *probe-wise* analysis is useful and informative, sometimes we are interested in knowing whether several proximal CpGs are concordantly differentially methylated i.e. we want to identify differentially methylated **regions**. There are several Bioconductor packages that can identify differentially methylated regions from 450k data. Some of the most popular are [DMRcate](https://www.bioconductor.org/packages/release/bioc/html/DMRcate.html), [minfi](http://bioconductor.org/packages/release/bioc/html/minfi.html) plus [bumphunter](https://www.bioconductor.org/packages/3.3/bioc/html/bumphunter.html) and [charm](http://www.bioconductor.org/packages/release/bioc/html/charm.html). They are each based on different statistical methods. In this workshop, we are using *DMRcate* because it is faster than the other methods and is based on *limma*, so we can directly use the `design` and `contMatrix` we previously defined.
+
+Firstly, our matrix of M-values is annotated with relevant information about the probes such as their genomic position, gene annotation, etc. By default, this is done using the `ilmn12.hg19` annotation, but this can be substituted for any argument compatible with the interface provided by the *minfi* package. The backbone of the *limma* pipeline is then used for differential array analysis to calculate t-statistics and, optionally, filter probes by their FDR-corrected p-value.
 ```{r, cache=TRUE}
 myAnnotation = cpg.annotate(mVals, analysis.type="differential", design=design, contrasts = TRUE,
                              cont.matrix = contMatrix, coef="naive - rTreg")
+
+str(myAnnotation)
+```
+
+We can then use the `dmrcate` function to look for differentially methylated regions. The main output table `DMRs$results` contains all of the regions found, along with their genomic annotations and p-values.
+```{r, cache=TRUE}
 DMRs = dmrcate(myAnnotation, lambda=1000, C=2)
-
 head(DMRs$results)
+```
 
+The regions can be quickly examined using the `DMR.plot` function provided in the *DMRcate* package. 
+```{r, cache=TRUE}
 par(mfrow=c(1,1))
-DMR.plot(dmrcoutput=DMRs, dmr=2, betas=bVals, phen.col=pal[factor(targets$Sample_Group)],
+DMR.plot(dmrcoutput=DMRs, dmr=1, betas=bVals, phen.col=pal[factor(targets$Sample_Group)],
          pch=16, toscale=TRUE, plotmedians=TRUE)
 legend("bottomleft",legend=levels(factor(targets$Sample_Group)),col=pal,lty=1)
 
 ```
 
+The *Gviz* package offers some powerful functionality for plotting genomic data in its genomic context. Their extensive [vignette](https://bioconductor.org/packages/release/bioc/vignettes/Gviz/inst/doc/Gviz.pdf) covers the various types of plots that can be produced using their framework. We will re-plot the top differentially methylated region from the previous analysis to demonstrate the richness of the visualisations that can be created.
+
+Firstly, we will set up the genomic region we would like to plot by extracting the genomic coordinates of the top differentially methylated region.
 # Visualisations
 ```{r, cache=TRUE}
+gen = "hg19"
+coords = strsplit2(DMRs$results$hg19coord[1],":")
+chrom = coords[1]
+minbase = as.numeric(strsplit2(coords[2],"-")[1]) - 2000
+maxbase = as.numeric(strsplit2(coords[2],"-")[2]) + 2000
+```
+
+Next we will load up some genomic annotations of interest such as the locations of CpG islands and DNAseI hypersensitive sites.
+```{r, cache=TRUE}
+## CpG islands
+islandHMM = read.csv("D:/Work/BioinfoSummer2015/450kAnalysisWorkshop/data/model-based-cpg-islands-hg19.txt", 
+                     sep="\t", stringsAsFactors =FALSE, header=TRUE)
+head(islandHMM)
+
+islandData = GRanges(seqnames = Rle(islandHMM$chr), 
+                     ranges = IRanges(islandHMM$start, end = islandHMM$end),
+                    strand = Rle(strand(rep("*",nrow(islandHMM)))))
+islandData = islandData[seqnames(islandData) == chrom & 
+                         (start(islandData) >= minbase & end(islandData) <= maxbase)] # this is to reduce the amount of data in memory
+islandData
+
+## DNAseI hypersensitive sites
+dnase = read.csv("D:/Work/BioinfoSummer2015/450kAnalysisWorkshop/data/wgEncodeRegDnaseClusteredV3.bed",
+                 sep="\t",stringsAsFactors=FALSE,header=FALSE)
+head(dnase)
+
+dnaseData = GRanges(seqnames = dnase[,1],
+                    ranges = IRanges(dnase[,2], end = dnase[,3]),
+                    strand = Rle(rep("*",nrow(dnase))),
+                    data = dnase[,5])
+dnaseData = dnaseData[seqnames(dnaseData) == chrom & 
+                          (start(dnaseData) >= minbase & end(dnaseData) <= maxbase)] # this is to reduce the amount of data in memory
+dnaseData
+```
+
+Now, set up the ideogram, genome and RefSeq tracks that will provide context for our methylation data. 
+```{r, cache=TRUE}
+iTrack = IdeogramTrack(genome = gen, chromosome = chrom, name="")
+gTrack = GenomeAxisTrack(col="black", cex=1, name="", fontcolor="black")
+rTrack = UcscTrack(genome = gen, chromosome = chrom, track = "refGene", from = minbase, 
+                            to = maxbase, trackType = "GeneRegionTrack", rstarts = "exonStarts", 
+                            rends = "exonEnds", gene = "name", symbol = "name2", transcript = "name", 
+                            strand = "strand", fill = "darkblue",stacking = "squish", name = "RefSeq", 
+                            showId=TRUE, geneSymbol=TRUE)
+```
+
+Ensure that the methylation data is ordered by chromosome and base position.
+```{r, cache=TRUE}
+ann450kOrd = ann450kSub[order(ann450kSub$chr,ann450kSub$pos),]
+head(ann450kOrd)
+
+bValsOrd = bVals[match(ann450kOrd$Name,rownames(bVals)),]
+head(bValsOrd)
+```
+
+Create the data tracks using the appropriate track type for each data type.
+```{r, cache=TRUE}
+
+methTrack = DataTrack(start=ann450kOrd$pos, width=1, 
+                      data=t(bValsOrd), 
+                     groups=targets$Sample_Group,genome = gen,chromosome = chrom, ylim=c(-0.05,1.05),
+                     col=pal,type=c("a","p"), name="DNA Meth.\n(beta value)", background.panel="white",legend=TRUE,
+                     cex.title=0.4,cex.axis=0.5,cex.legend=0.8)
+islandTrack = AnnotationTrack(range=islandData, genome = gen, name = "CpG Is.", fill="grey40",
+                              chromosome = chrom)
+dnaseTrack = DataTrack(range=dnaseData, genome = gen, name = "DNAseI", type="gradient",
+                        chromosome = chrom)
+```
+
+Set up the track list and indicate the relative sizes of the different tracks. Finally, make the plot using the `plotTracks` function.
+```{r, cache=TRUE}
+tracks = list(iTrack,gTrack,methTrack,islandTrack,dnaseTrack,rTrack)
+sizes = c(3,3,5,3,3,5)
+
+plotTracks(tracks, from = minbase, to = maxbase, showTitle = TRUE, add53 = TRUE, add35 = TRUE, 
+             grid=TRUE, lty.grid=3, sizes=sizes, length(tracks))
+
 
 ```
 
