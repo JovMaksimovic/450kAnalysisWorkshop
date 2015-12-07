@@ -12,7 +12,7 @@ output:
 ---
 
 #Introduction
-Methylation, the addition of a methyl group to a CG dinucleotide of the DNA, is the most extensively studied epigenetic mark. Although it can be measured in many ways, the most popular platform for measuring methylation has been the Illumina HumanMethylation450 (450k) array. In this workshop, we will introduce the features of the 450k array and how to analyse the methylation array data using R. We will cover the steps involved in the standard 450k analysis pipeline including: quality control, filtering, normalization, data exploration and probe-wise differential methylation array analysis. We will also cover other approaches such as differential methylation analysis of regions, differential variability analysis and gene ontology analysis. Finally, we will provide some examples of how to visualise methylation array data
+Methylation, the addition of a methyl group to a CG dinucleotide of the DNA, is the most extensively studied epigenetic mark. Although it can be measured in many ways, the most popular platform for measuring methylation has been the Illumina HumanMethylation450 (450k) array. In this workshop, we will introduce the features of the 450k array and how to analyse the methylation array data using R. We will cover the steps involved in the standard 450k analysis pipeline including: quality control, filtering, normalization, data exploration and probe-wise differential methylation array analysis. We will also cover other approaches such as differential methylation analysis of regions, differential variability analysis and gene ontology analysis. Finally, we will provide some examples of how to visualise methylation array data.
 
 ##Preparing for the workshop
 ###Software
@@ -34,13 +34,13 @@ biocLite(c("minfi","limma","IlluminaHumanMethylation450kanno.ilmn12.hg19","minfi
 ```
 
 ###Data
-To demonstrate the various aspects of analysing methylation data, we will be using a small methylation dataset that has been previously analysed and published. The data is of the methylation profiles of various sorted T-cell types. More information on the samples and the dataset can be found in the original [paper](http://www.bloodjournal.org/content/122/16/2823?sso-checked=true). The data can be downloaded from the [MCRI Owncloud](https://owncloud.mcri.edu.au/index.php/s/zESg9ejgf065VOy) (password: *biosummer2015*) until Dec 12th. If possible, please download the data prior to the beginning of the workshop.
+To demonstrate the various aspects of analysing methylation data, we will be using a small methylation dataset that has been previously analysed and published. The data is of the methylation profiles of various sorted T-cell types. More information on the samples and the dataset can be found in the original [paper](http://www.bloodjournal.org/content/122/16/2823?sso-checked=true). The data can be downloaded from the [MCRI Owncloud](https://owncloud.mcri.edu.au/index.php/s/zESg9ejgf065VOy) (password: *biosummer2015*) until Dec 12th. Please download all of the data files into the **same** directory.
 
 ## Illumina HumanMethylation450 BeadChips
 [Illumina HumanMethylation450 (450k) arrays](http://www.illumina.com/products/methylation_450_beadchip_kits.html) are a cost-effective alternative to whole genome bisulfite sequencing, and as such have been widely used to profile DNA methylation, particularly for studies with large numbers of samples. Illumina have recently release a new platform, the [Illumina MethylationEPIC array](http://www.illumina.com/products/infinium-methylation-epic-array.html), which increases the number of CpG probes from ~450,000 to ~850,000. Although the number of CpGs covered is increased on the new array, the same probe chemistry is being used and thus the principles for analysing the 450k array should be largely applicable to the new 850k array.     
 
 # Standard analysis
-This workshop will cover various aspects of a basic differential methylation analysis of 450k arrays. We will begin with an example of a **probe-wise** methylation analysis using *minfi* and *limma*. By **probe-wise** analysis we mean that we will obtain a moderated t-statistic and p-value for each individual CpG probe, which we can use to determine which individual CpGs are differentially methylated at some significance level for our comparisons of interest.
+This workshop will cover various aspects of a basic differential methylation analysis of 450k arrays. There are many R Bioconductor packages available for analysing 450k array methylation data, including [minfi](http://bioconductor.org/packages/release/bioc/html/minfi.html), [missMethyl](http://www.bioconductor.org/packages/release/bioc/html/missMethyl.html), [wateRmelon](https://www.bioconductor.org/packages/release/bioc/html/wateRmelon.html) and [methylumi](https://www.bioconductor.org/packages/release/bioc/html/methylumi.html). We will begin with an example of a **probe-wise** methylation analysis using *minfi* and *limma*. By **probe-wise** analysis we mean that we will obtain a moderated t-statistic and p-value for each individual CpG probe, which we can use to determine which individual CpGs are differentially methylated at some significance level for our comparisons of interest.
 
 ### Loading the data
 We will begin by loading all the package libraries that will be required for the analysis.
@@ -67,9 +67,11 @@ head(ann450k)
 
 Next, we will load in the data. The sample sheet file is essentially a CSV (comma-separated) file containing one line per sample, with a number of columns describing each sample. The format expected by the `read.450k.sheet` function is based on the sample sheet file Illumina provides. It is also very similar to the targets file made popular by the *limma* package (see the extensive [Limma User's Guide](https://www.bioconductor.org/packages/release/bioc/vignettes/limma/inst/doc/usersguide.pdf)). Raeding in the sample sheet essentially creates a `data.frame`. If they exist, a column named `Sentrix_Position` is renamed to `Array` and `Sentrix_ID` is renamed to `Slide`. The function also attempts to derive the path to the IDAT files using the `baseDir` and the `Slide` and `Array` information. This will be stored in a column named `Basename`.
 ```{r, cache=TRUE}
+## set up a path to the directory you donloaded the data to
+dataDirectory = "D:/Work/BioinfoSummer2015/450kAnalysisWorkshop/data"
+
 ## read in the sample sheet for the experiment
-targets = read.450k.sheet("D:/Work/BioinfoSummer2015/450kAnalysisWorkshop/data",
-                          pattern="SampleSheet.csv")
+targets = read.450k.sheet(dataDirectory, pattern="SampleSheet.csv")
 targets
 ```
 
@@ -142,6 +144,7 @@ densityPlot(getBeta(mSetSq), sampGroups = targets$Sample_Group,main="SQN")
 ```
 
 ### Data exploration
+Multi dimensional scaling (MDS) plots are excellent for visualising your data, and are usually one of the first kinds of plots you should make when exploring your data. It is based on principle componenents analysis and is an unsupervised method for looking at the similarities and differences between the samples of the data. Samples that are more similar to each other should cluster together, and samples that are very different should be further apart on the plot. Dimension 1 (or principle component 1) captures the greatest source of variation in the data, dimension 2 captures the second greatest source of variation in the data and so on.  Colouring in the data points or labels by known factors of interest can often pull out exactly what the greatest sources of variation are in the data. It's also possible to use MDSplots for figuring out sample mix-ups.
 ```{r, cache=TRUE}
 ## MDS plots to look at largets sources of variation
 par(mfrow=c(1,2))
@@ -190,7 +193,7 @@ mSetSqFlt = dropLociWithSnps(mSetSqFlt)
 We will also filter out probes that have shown to be cross-reactive i.e. map to multiple places in the genome. This list was oroginally published by [Chen et al.](http://www.tandfonline.com/doi/abs/10.4161/epi.23470) in 2013 and can be downloaded directly from the author's [website](http://www.sickkids.ca/MS-Office-Files/Research/Weksberg%20Lab/48639-non-specific-probes-Illumina450k.xlsx). The Excel spreadsheet containing the cross-reactive probes is also available as part of the data download for this workshop.
 ```{r, cache=TRUE}
 ## exclude cross reactive probes 
-xReactiveProbes = read.csv(file="D:/Work/BioinfoSummer2015/450kAnalysisWorkshop/data/48639-non-specific-probes-Illumina450k.csv", stringsAsFactors=FALSE)
+xReactiveProbes = read.csv(file=paste(dataDirectory,"48639-non-specific-probes-Illumina450k.csv",sep="/"), stringsAsFactors=FALSE)
 keep = !(featureNames(mSetSqFlt) %in% xReactiveProbes$TargetID)
 table(keep)
 
@@ -205,7 +208,7 @@ mVals = getM(mSetSqFlt)
 head(mVals)
 
 bVals = getBeta(mSetSqFlt)
-head(mVals)
+head(bVals)
 
 par(mfrow=c(1,2))
 densityPlot(bVals,sampGroups = targets$Sample_Group,main="Beta values")
@@ -214,6 +217,7 @@ densityPlot(mVals,sampGroups = targets$Sample_Group,main="M values")
 
 
 ### Differential methylation analysis (probes)
+The primary biological goal for this dataset is to discover differentially methylated probes between the different cell types. However, there is another factor that we need to take into account when we perform the modelling. In the `targets` file, there is a column called `Sample_Source`, and this refers to the individuals from whom the samples came. In this dataset, any one particular individual contributes more than one cell type. For example, individual M28 contributes naive, rTreg and actnaive samples. From the MDS plots we know that the samples cluster according to individual first, and then by cell type, implying that individual is the greatest source of variation in methylation. In order to get the cell type differences, we need to take into account individual variation. Hence when we specify our design matrix, we need to include two factors: individual and cell type. This style of analysis is called a paired analysis; differences between cell types are calculated *within* each individual, and then these differences are summed *across* individuals to determine whether overall there is a significant difference in the mean methylation level for each CpG site.
 ```{r, cache=TRUE}
 cellType = factor(targets$Sample_Group) ## this is the factor of interest
 individual = factor(targets$Sample_Source) ## this is the individual effect that we need to account for
@@ -244,12 +248,12 @@ DMPs = topTable(fit2, num=Inf, coef=1, genelist = ann450kSub)
 head(DMPs)
 
 ```
-
+The results of the analysis for the first comparison, naive vs rTreg, are stored in the `DMPs` object. We can write out this file as a comma separated file, which can be opened in excel.
 ```{r, eval=FALSE}
 write.table(DMPs, file="DMPs.csv", sep=",", row.names=FALSE)
 
 ```
-
+It is always useful to plot the top differentially methylated CpG sites - it serves as a sanity check to make sure the results make sense, and if they don't it usually means there is an error in the code somewhere, or perhaps the design matrix was not set up correctly. It is easier to interpret methylation on the beta value scale, so although we always perform analysis on the Mvalue scale, we usually visualise data on the beta value scale.
 ```{r, cache=TRUE}
 par(mfrow=c(2,2))
 sapply(rownames(DMPs)[1:4], function(cpg){
@@ -258,49 +262,77 @@ sapply(rownames(DMPs)[1:4], function(cpg){
 
 ```
 
-
 # Additional analyses
 ## Gene ontology testing
 
-Once you have performed a differential methylation analysis, there may be a very long list of significant CpG sites to interpret. One question a researcher may have is which gene pathways may be targeted by the significant CpGs. For example, the most differentially methylated CpG site for the naive vs rTreg comparison is in the 1st exon of the TIGIT gene, which is a T cell immunoreceptor. In this case it is easy to link the top gene to the cell types being studied, but there are also more than 4000 CpGs significantly differentially methylated. In order to get an idea of the biological processes that these 4000 CpGs may be involved in, we can perform gene ontology testing with the gometh function in the missMethyl package.
+Once you have performed a differential methylation analysis, there may be a very long list of significant CpG sites to interpret. One question a researcher may have is which gene pathways may be targeted by the significant CpGs. Sometimes it is easy to link the top differentially methylated CpGs to genes that make sense in terms of the cell types/samples being studied, but there can be many more thousands of CpGs significantly differentially methylated. In order to get an idea of the biological processes that the significant CpGs may be involved in, we can perform gene ontology testing with the `gometh` function in the *missMethyl* package.
 
-Let us consider the first comparison, naive vs rTreg, with the results of the analysis in the result table. The gometh function takes as input a character vector of the names (e.g. cg20832020) of the significant CpG sites, and optionally, a character vector of all CpGs tested. This is recommended if you have performed quite a lot of filtering of the CpGs before analysis. In the result table, the first column corresponds to the CpG name. We will select all CpG sites that have adjusted p-value of less than 0.05.
+Let us consider the first comparison, naive vs rTreg, with the results of the analysis in the `DMPs` table. The `gometh` function takes as input a character vector of the names (e.g. cg20832020) of the significant CpG sites, and optionally, a character vector of all CpGs tested. This is recommended if you have performed quite a lot of filtering of the CpGs before analysis. In the `DMPs` table, the `Name` column corresponds to the CpG name. We will select all CpG sites that have adjusted p-value of less than 0.05.
 
 ```{r, cache=TRUE}
+## Get the significant CpG sites at less than 5% FDR
 sigCpGs = DMPs$Name[DMPs$adj.P.Val<0.05]
-# First 10 significant CpGs
+## First 10 significant CpGs
 sigCpGs[1:10]
+## Total number of significant CpGs at 5% FDR
+length(sigCpGs)
+## Get all the CpG sites used in the analysis to form the background
 all = DMPs$Name
+## Total number of CpG sites tested
 length(all)
 ```
 
-What makes gometh work particularly well with methylation data is that it can take into account the varying numbers of CpGs associated with genes. For the 450K array, the numbers of CpGs mapping to genes can vary from as few as 1 to as many as 1200. The genes that have more CpGs associated with them will have a higher probability of being identified as differentially methylated compared to genes with fewer CpGs. We can look at the bias in the data by specifying plot=TRUE in the call to gometh.
+What makes `gometh` work particularly well with methylation data is that it can take into account the varying numbers of CpGs associated with genes. For the 450K array, the numbers of CpGs mapping to genes can vary from as few as 1 to as many as 1200. The genes that have more CpGs associated with them will have a higher probability of being identified as differentially methylated compared to genes with fewer CpGs. We can look at the bias in the data by specifying `plot=TRUE` in the call to `gometh`.
 
 ```{r, cache=TRUE}
 par(mfrow=c(1,1))
 gst <- gometh(sig.cpg=sigCpGs, all.cpg=all, plot.bias=TRUE)
 ```
 
-The gst object is a dataframe with each row corresponding to the GO category being tested. The top 20 gene ontology categories can be displayed using the topGO function:
+The `gst` object is a dataframe with each row corresponding to the GO category being tested. The top 20 gene ontology categories can be displayed using the `topGO` function:
 
 ```{r, cache=TRUE}
+## Top 20 GO categories
 topGO(gst)
 ```
 
-The total number of significant GO categories, adjusted for multiple testing, are:
+Here we can see lots of GO categories corresponding to immune system and T cell processes, which makes sense as the cell types being studied form part of the immune system.
+The total number of significant GO categories, adjusted for multiple testing, is:
 
 ```{r, cache=TRUE}
+## Total number of significant GO categories at 5% FDR
 sum(gst$FDR<0.05)
 ```
 
 ## Differential variability
-```{r, cache=TRUE}
-fitvar <- varFit(mVals, design = design, coef = c(1,4))
+Rather than testing for differences in mean methylation, we may be interested in testing for differences between group variances. For example, it has been hypothesised that highly variable CpGs in cancer are important for tumour progression. Hence we may be interested in CpG sites that are consistently methylated in one group, but variably methylated in another group. In general we recommend at least 10 samples in each group for testing differential variability in order to get a good estimate of the variance. It is more tricky to accurately estimate variances as opposed to means, so you generally need a larger sample size for testing differences in group variances as opposing to testing differences in group means. For the purpose of this workshop, we won't worry about this sample size issue.
 
+The way we specify which groups we are interested in testing is a little bit different to the way you specify a model in `limma` for differential methylation, particularly if you fit an intercept model. For our data, we have set up a design matrix without an intercept term, and we will specify which groups we want to test for differential variability in a contrasts statement. We can use the same design matrix that we set up for testing differential methylation.
+```{r, cache=TRUE}
+## Fit the model for differential variability, specifying that the four cell types are the groups of interest
+fitvar <- varFit(mVals, design = design, coef = c(1,2,3,4))
+## Specify the groups we are interested in testing for differential variability
+contr <- makeContrasts(naive-rTreg,
+                       naive-act_naive,
+                       rTreg-act_rTreg,
+                       act_naive-act_rTreg,
+                       levels=design)
+fitvar <- contrasts.varFit(fitvar,contrasts=contr)
+## Summary of differential variability
 summary(decideTests(fitvar))
-topDV <- topVar(fitvar, coef=4)
+topDV <- topVar(fitvar, coef=1)
+## Top 10 differentially variable CpGs between naive and rTreg
 topDV
 ```
+Just as we had a look at the beta values for the significant differentially methylated CpGs, it is useful to plot differentially variable CpGs too.
+
+```{r, cache=TRUE}
+par(mfrow=c(2,2))
+sapply(rownames(topDV)[1:4], function(cpg){
+  plotCpg(bVals, cpg=cpg, pheno = targets$Sample_Group)
+})
+```
+An example of testing for differential variability when you have a design matrix with an intercept term is detailed in the *missMethyl* [vignette]("http://www.bioconductor.org/packages/release/bioc/vignettes/missMethyl/inst/doc/missMethyl.pdf").
 
 ## Differential methylation analysis (regions)
 Although performing a *probe-wise* analysis is useful and informative, sometimes we are interested in knowing whether several proximal CpGs are concordantly differentially methylated i.e. we want to identify differentially methylated **regions**. There are several Bioconductor packages that can identify differentially methylated regions from 450k data. Some of the most popular are [DMRcate](https://www.bioconductor.org/packages/release/bioc/html/DMRcate.html), [minfi](http://bioconductor.org/packages/release/bioc/html/minfi.html) plus [bumphunter](https://www.bioconductor.org/packages/3.3/bioc/html/bumphunter.html) and [charm](http://www.bioconductor.org/packages/release/bioc/html/charm.html). They are each based on different statistical methods. In this workshop, we are using *DMRcate* because it is faster than the other methods and is based on *limma*, so we can directly use the `design` and `contMatrix` we previously defined.
@@ -328,10 +360,11 @@ legend("bottomleft",legend=levels(factor(targets$Sample_Group)),col=pal,lty=1)
 
 ```
 
+# Visualisations
 The *Gviz* package offers some powerful functionality for plotting genomic data in its genomic context. Their extensive [vignette](https://bioconductor.org/packages/release/bioc/vignettes/Gviz/inst/doc/Gviz.pdf) covers the various types of plots that can be produced using their framework. We will re-plot the top differentially methylated region from the previous analysis to demonstrate the richness of the visualisations that can be created.
 
 Firstly, we will set up the genomic region we would like to plot by extracting the genomic coordinates of the top differentially methylated region.
-# Visualisations
+
 ```{r, cache=TRUE}
 gen = "hg19"
 coords = strsplit2(DMRs$results$hg19coord[1],":")
@@ -343,7 +376,7 @@ maxbase = as.numeric(strsplit2(coords[2],"-")[2]) + 2000
 Next we will load up some genomic annotations of interest such as the locations of CpG islands and DNAseI hypersensitive sites.
 ```{r, cache=TRUE}
 ## CpG islands
-islandHMM = read.csv("D:/Work/BioinfoSummer2015/450kAnalysisWorkshop/data/model-based-cpg-islands-hg19.txt", 
+islandHMM = read.csv(paste(dataDirectory,"model-based-cpg-islands-hg19.txt",sep="/"), 
                      sep="\t", stringsAsFactors =FALSE, header=TRUE)
 head(islandHMM)
 
@@ -355,7 +388,7 @@ islandData = islandData[seqnames(islandData) == chrom &
 islandData
 
 ## DNAseI hypersensitive sites
-dnase = read.csv("D:/Work/BioinfoSummer2015/450kAnalysisWorkshop/data/wgEncodeRegDnaseClusteredV3.bed",
+dnase = read.csv(paste(dataDirectory,"wgEncodeRegDnaseClusteredV3.bed",sep="/"),
                  sep="\t",stringsAsFactors=FALSE,header=FALSE)
 head(dnase)
 
